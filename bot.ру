@@ -1,0 +1,64 @@
+import os
+import asyncio
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import Command
+from yt_dlp import YoutubeDL
+
+TOKEN = "9038286308:AAFp9X9pysBA7PzzSlI2PHcP8t9JdFVyiPo"
+
+bot = Bot(token=TOKEN)
+dp = Dispatcher()
+
+# Настройки для быстрого поиска музыки без нагрузки на память сервера
+ydl_opts = {
+    'format': 'bestaudio/best',
+    'quiet': True,
+    'no_warnings': True,
+}
+
+@dp.message(Command("start"))
+async def start_cmd(message: types.Message):
+    await message.answer("🎵 Привет! Я твой музыкальный бот. Отправь мне название песни, и я найду её для тебя 24/7!")
+
+@dp.message()
+async def search_music(message: types.Message):
+    # Игнорируем пустые сообщения или другие команды
+    if not message.text or message.text.startswith('/'):
+        return
+        
+    status_msg = await message.answer("🔍 Ищем трек, подожди немного...")
+    search_query = f"ytsearch1:{message.text}"
+    
+    try:
+        with YoutubeDL(ydl_opts) as ydl:
+            loop = asyncio.get_event_loop()
+            # Находим прямую ссылку в интернете
+            info = await loop.run_in_executor(None, lambda: ydl.extract_info(search_query, download=False))
+            
+            if 'entries' in info and len(info['entries']) > 0:
+                video_info = info['entries'][0]
+                audio_url = video_info['url'] # Прямая ссылка на аудио
+                title = video_info.get('title', 'Без названия')
+                performer = video_info.get('uploader', 'Исполнитель')
+                
+                await status_msg.edit_text("🚀 Отправляю аудио в Telegram...")
+                
+                # Передаем ссылку Телеграму, он сам превратит её в плеер
+                await message.answer_audio(
+                    audio=audio_url, 
+                    title=title, 
+                    performer=performer
+                )
+                await status_msg.delete()
+            else:
+                await status_msg.edit_text("❌ Ничего не найдено. Попробуй изменить запрос.")
+                
+    except Exception as e:
+        print(f"Ошибка: {e}")
+        await status_msg.edit_text("⚠️ Не удалось отправить этот трек. Попробуй другое название.")
+
+async def main():
+    await dp.start_polling(bot)
+
+if __name__ == '__main__':
+    asyncio.run(main())
